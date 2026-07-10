@@ -1,0 +1,19 @@
+<%- include('partials/header') %>
+
+<div class="content">
+    <h1>Создание категории</h1>
+    <form method="post" action="/create-category/">
+        <p><input type="text" name="name" placeholder="Название"></p>
+        <p>
+            <select name="category_id">
+                <option value="">Без родительской категории</option>
+                <% for(let i=0; i<categories.length; i++) { %>
+                    <option value="<%= categories[i].id %>"><%= categories[i].name %></option>
+                <% } %>
+            </select>
+        </p>
+        <button type="submit">Сохранить</button>
+    </form>
+</div>
+
+<%- include('partials/footer') %>

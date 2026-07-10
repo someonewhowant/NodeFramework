@@ -1,0 +1,17 @@
+<%- include('partials/header') %>
+
+<div class="content">
+    <h1>Список категорий</h1>
+    <ul>
+        <% for(let i=0; i<objects_list.length; i++) { %>
+            <li><%= objects_list[i].name %> <span>Количество курсов: <%= objects_list[i].courseCount() %></span></li>
+        <% } %>
+    </ul>
+    
+    <div>
+        <li><a href="/courses-list/">Список курсов</a></li>
+        <li><a href="/create-category/">Создать категорию</a></li>
+    </div>
+</div>
+
+<%- include('partials/footer') %>
