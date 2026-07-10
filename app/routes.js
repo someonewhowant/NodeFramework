@@ -1,10 +1,18 @@
 const controllers = require('./controllers');
 
-// Словарь маршрутов (пути обязательно с закрывающим слешем, как было решено в ядре)
+// Словарь маршрутов разделен по HTTP-методам
 const routes = {
-    '/': controllers.index,
-    '/index/': controllers.index,
-    '/about/': controllers.about
+    'GET': {
+        '/': controllers.index,
+        '/index/': controllers.index,
+        '/about/': controllers.about
+    },
+    'POST': {
+        // Заглушка, чтобы показать работу POST
+        '/about/': controllers.about 
+    },
+    'PUT': {},
+    'DELETE': {}
 };
 
 module.exports = routes;

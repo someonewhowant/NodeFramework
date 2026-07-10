@@ -1,4 +1,5 @@
 const url = require('url');
+const requestParser = require('./request_parser');
 
 // Контроллер для обработки 404 ошибки (PageNotFound)
 const pageNotFound404 = (req, res) => {
@@ -20,28 +21,46 @@ class Framework {
      * @param {Object} req - Объект HTTP запроса (http.IncomingMessage)
      * @param {Object} res - Объект HTTP ответа (http.ServerResponse)
      */
-    handleRequest(req, res) {
+    async handleRequest(req, res) {
         // Получаем адрес, по которому пользователь выполнил переход (PATH_INFO)
         const parsedUrl = url.parse(req.url, true);
         let path = parsedUrl.pathname;
 
-        // Добавляем закрывающий слеш для единообразия, как в Python-версии
+        // Добавляем закрывающий слеш для единообразия
         if (!path.endsWith('/')) {
             path += '/';
         }
 
-        console.log(`[Framework] Получен запрос по адресу: ${path}`);
+        console.log(`[Framework] Получен ${req.method}-запрос по адресу: ${path}`);
 
-        // Находим нужный контроллер (view)
-        let view = this.routes[path];
+        // Сбор параметров в единый объект request (аналог обогащения из Урока 2)
+        req.query = requestParser.parseGetRequest(req);
+        if (Object.keys(req.query).length > 0) {
+            console.log(`Нам пришли GET-параметры:`, req.query);
+        }
+
+        if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+            try {
+                req.body = await requestParser.parseBody(req);
+                console.log(`Нам пришёл ${req.method}-запрос с телом:`, req.body);
+            } catch (err) {
+                console.error(`Ошибка при чтении тела ${req.method}-запроса:`, err);
+                res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+                return res.end('500 Internal Server Error');
+            }
+        } else {
+            req.body = {};
+        }
+
+        // Находим нужный контроллер (view) с учетом метода
+        let methodRoutes = this.routes[req.method] || {};
+        let view = methodRoutes[path];
 
         if (!view) {
             view = pageNotFound404;
         }
 
-        // Запускаем контроллер. В Node.js мы передаем req и res напрямую в контроллер,
-        // чтобы он сам мог отправить ответ. 
-        // (В будущих уроках мы добавим сюда формирование объекта request)
+        // Запускаем контроллер, передавая обогащенный req и res
         view(req, res);
     }
 }
