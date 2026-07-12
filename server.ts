@@ -1,13 +1,22 @@
-import * as http from 'http';
+import 'reflect-metadata';
+import * as path from 'path';
 import { Framework } from './core/framework';
 
-// Важно: Импортируем controllers.ts, чтобы отработали декораторы!
-import './app/controllers';
+// Регистрация контроллеров
+import './src/modules/pages/page.controller';
+import './src/modules/courses/course.controller';
+import './src/modules/students/student.controller';
 
-const app = new Framework();
-const server = http.createServer(app.handleRequest.bind(app));
+const PORT = 8080;
 
-const PORT = 3000;
-server.listen(PORT, () => {
-    console.log(`Сервер (TS) запущен на порту ${PORT}`);
+// Инициализация фреймворка с настройкой (Bootstrap Configuration)
+const app = new Framework({
+    staticUrl: '/static/',
+    staticDir: path.join(__dirname, 'staticfiles'),
+    viewsDir: path.join(__dirname, 'src', 'views')
+});
+
+app.listen(PORT, () => {
+    console.log(`[Server] Запуск сервера на порту ${PORT}...`);
+    console.log(`[Server] http://localhost:${PORT}/`);
 });

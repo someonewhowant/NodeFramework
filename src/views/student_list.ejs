@@ -1,0 +1,25 @@
+<%- include('partials/header') %>
+
+<div class="content">
+    <h1>Список студентов из базы данных SQLite</h1>
+    <% if (objects_list && objects_list.length > 0) { %>
+        <table border="1">
+            <tr class="head">
+                <th>ID</th>
+                <th>Имя</th>
+            </tr>
+            <% for (let i = 0; i < objects_list.length; i++) { %>
+                <tr class="<%= i % 2 === 0 ? 'even' : '' %>">
+                    <td><%= objects_list[i].id %></td>
+                    <td><%= objects_list[i].name %></td>
+                </tr>
+            <% } %>
+        </table>
+    <% } else { %>
+        <p>Список студентов пуст.</p>
+    <% } %>
+    <br>
+    <p><a href="/create-student/">Создать нового студента</a></p>
+</div>
+
+<%- include('partials/footer') %>
