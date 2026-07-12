@@ -1,20 +1,30 @@
-import { parseGetRequest, parseBody } from './request_parser';
-import { RouterRegistry } from './decorators';
+import { parseGetRequest } from './request_parser';
 import { IncomingMessage, ServerResponse } from 'http';
 import { SimbaRequest, SimbaResponse, FrameworkConfig } from './types';
-import { UnitOfWork } from './unit_of_work';
 import { FrameworkSettings, configureSettings } from './settings';
-import { CONTENT_TYPES_MAP } from './content_types';
-import * as path from 'path';
-import * as fs from 'fs';
+import {
+    Middleware,
+    MiddlewarePipeline,
+    errorHandlerMiddleware,
+    staticFilesMiddleware,
+    loggingMiddleware,
+    bodyParserMiddleware,
+    unitOfWorkMiddleware,
+    routerMiddleware
+} from './middleware';
 import * as http from 'http';
 
-const pageNotFound404 = (req: SimbaRequest, res: SimbaResponse) => {
-    res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end('<h1>404 WHAT</h1><p>404 PAGE Not Found</p>');
-};
-
 export class Framework {
+    /**
+     * Пользовательские middleware, добавленные через use().
+     * Вставляются в конвейер между bodyParser и unitOfWork.
+     */
+    private readonly userMiddlewares: Middleware[] = [];
+
+    /**
+     * Кэшированный конвейер (строится лениво при первом запросе)
+     */
+    private _pipeline?: MiddlewarePipeline;
     
     constructor(config?: FrameworkConfig) {
         if (config) {
@@ -26,16 +36,78 @@ export class Framework {
         }
     }
 
-    getContentType(filePath: string): string {
-        const ext = path.extname(filePath).toLowerCase();
-        return CONTENT_TYPES_MAP[ext] || 'text/html';
+    /**
+     * Добавляет пользовательский middleware в конвейер.
+     * 
+     * Middleware вызываются в порядке добавления и размещаются
+     * между bodyParser и unitOfWork в общем конвейере.
+     * 
+     * ВАЖНО: вызывайте use() ДО listen(), иначе middleware не попадёт в конвейер.
+     * 
+     * @example
+     * ```typescript
+     * app.use(async (req, res, next) => {
+     *     res.setHeader('X-Powered-By', 'SimbaFramework');
+     *     await next();
+     * });
+     * ```
+     */
+    use(middleware: Middleware): this {
+        this.userMiddlewares.push(middleware);
+        return this;
     }
 
-    async getStatic(staticDir: string, filePath: string): Promise<Buffer> {
-        const pathToFile = path.join(staticDir, filePath);
-        return await fs.promises.readFile(pathToFile);
+    /**
+     * Собирает полный конвейер middleware.
+     * 
+     * Порядок выполнения:
+     * ┌─────────────────────────────────────────────────┐
+     * │ 1. ErrorHandler   — глобальный try/catch        │
+     * │ 2. StaticFiles    — раздача статики              │
+     * │ 3. Logging        — логирование + замер времени  │
+     * │ 4. BodyParser     — парсинг тела запроса         │
+     * │ 5. [User MW...]   — CORS, Auth, Rate Limit...    │
+     * │ 6. UnitOfWork     — транзакционная изоляция      │
+     * │ 7. Router         — маршрутизация и вызов view   │
+     * └─────────────────────────────────────────────────┘
+     */
+    private buildPipeline(): MiddlewarePipeline {
+        const pipeline = new MiddlewarePipeline();
+
+        // Системные middleware (порядок критичен!)
+        pipeline.use(errorHandlerMiddleware());     // 1. Обработка ошибок — обёртка вокруг всего
+        pipeline.use(staticFilesMiddleware());       // 2. Статика — short-circuit, не вызывает next()
+        pipeline.use(loggingMiddleware());           // 3. Логирование — замер времени
+        pipeline.use(bodyParserMiddleware());        // 4. Парсинг тела — JSON / URL-Encoded
+
+        // Пользовательские middleware (CORS, авторизация, rate-limit и т.д.)
+        pipeline.useAll(this.userMiddlewares);
+
+        // Финальные системные middleware
+        pipeline.use(unitOfWorkMiddleware());        // 5. UoW — транзакционный контекст
+        pipeline.use(routerMiddleware());            // 6. Роутер — финальный вызов контроллера
+
+        return pipeline;
     }
 
+    /**
+     * Получает или создаёт конвейер (ленивая инициализация).
+     * Конвейер строится один раз и переиспользуется для всех запросов.
+     */
+    private getPipeline(): MiddlewarePipeline {
+        if (!this._pipeline) {
+            this._pipeline = this.buildPipeline();
+            console.log(`[Framework] Конвейер собран: ${this._pipeline.length} middleware`);
+        }
+        return this._pipeline;
+    }
+
+    /**
+     * Точка входа для обработки HTTP-запроса.
+     * 
+     * Выполняет минимальную подготовку (нормализация пути, парсинг query string)
+     * и делегирует обработку конвейеру middleware.
+     */
     async handleRequest(rawReq: IncomingMessage, res: ServerResponse) {
         const req = rawReq as SimbaRequest;
         const parsedUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
@@ -45,57 +117,13 @@ export class Framework {
             pathName += '/';
         }
 
-        if (pathName.startsWith(FrameworkSettings.STATIC_URL)) {
-            const filePath = pathName.substring(FrameworkSettings.STATIC_URL.length, pathName.length - 1);
-            const contentType = this.getContentType(filePath);
-            
-            try {
-                const body = await this.getStatic(FrameworkSettings.STATIC_FILES_DIR, filePath);
-                res.writeHead(200, { 'Content-Type': contentType });
-                res.end(body);
-            } catch (err) {
-                pageNotFound404(req, res);
-            }
-            return;
-        }
-
-        console.log(`[Framework] Получен ${req.method}-запрос по адресу: ${pathName}`);
+        // Инициализация расширенных свойств SimbaRequest
+        req.path = pathName;
         req.query = parseGetRequest(req);
-        
-        let view = RouterRegistry.getInstance().getHandler(req.method || 'GET', pathName);
+        req.params = {};
 
-        if (!view) {
-            view = pageNotFound404;
-        }
-        
-        try {
-            if (['POST', 'PUT', 'PATCH'].includes(req.method || 'GET')) {
-                req.body = await parseBody(req);
-            } else {
-                req.body = {};
-            }
-
-            const uow = new UnitOfWork();
-            await UnitOfWork.asyncLocalStorage.run(uow, async () => {
-                await view(req, res);
-            });
-        } catch (err: any) {
-            console.error('[Framework] Обработанная ошибка:', err.message || err);
-            
-            if (err.message && err.message.startsWith('413')) {
-                res.writeHead(413, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end(err.message);
-                return;
-            }
-            if (err.message && err.message.startsWith('400')) {
-                res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.end(err.message);
-                return;
-            }
-
-            res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-            res.end('500 Internal Server Error');
-        }
+        // Делегация в конвейер middleware
+        await this.getPipeline().execute(req, res);
     }
 
     /**

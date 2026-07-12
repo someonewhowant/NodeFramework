@@ -3,9 +3,19 @@ import { IncomingMessage, ServerResponse } from 'http';
 export interface SimbaRequest extends IncomingMessage {
     query?: Record<string, string>;
     body?: any;
+    params?: Record<string, string>;
+    path?: string;
 }
 
 export interface SimbaResponse extends ServerResponse {}
+
+/**
+ * Результат поиска маршрута в RouterRegistry
+ */
+export interface RouteMatch {
+    handler: (req: SimbaRequest, res: SimbaResponse) => any;
+    params: Record<string, string>;
+}
 
 export interface FrameworkConfig {
     port?: number;

@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { SimbaRequest, SimbaResponse } from './types';
+import { SimbaRequest, SimbaResponse, RouteMatch } from './types';
 
 // Константа для ключа метаданных маршрутов
 const ROUTE_METADATA_KEY = 'custom:routes';
@@ -11,16 +11,40 @@ interface RouteDefinition {
 }
 
 /**
- * Изолированный реестр маршрутов (вместо глобального словаря)
+ * Описание динамического маршрута (с параметрами вида :id)
+ */
+interface DynamicRoute {
+    pattern: string;
+    regex: RegExp;
+    paramNames: string[];
+    handler: (req: SimbaRequest, res: SimbaResponse) => any;
+}
+
+/**
+ * Изолированный реестр маршрутов (вместо глобального словаря).
+ * Поддерживает статические и динамические маршруты с URL-параметрами.
+ * 
+ * Статические маршруты (например /about/) используют O(1) hash-таблицу.
+ * Динамические маршруты (например /students/:id/) компилируются в RegExp
+ * при регистрации и матчатся последовательно при запросе.
  */
 export class RouterRegistry {
     private static instance: RouterRegistry;
     
-    private readonly routes: Record<string, Record<string, (req: SimbaRequest, res: SimbaResponse) => any>> = {
+    // Статические маршруты — точное совпадение (быстрый путь)
+    private readonly staticRoutes: Record<string, Record<string, (req: SimbaRequest, res: SimbaResponse) => any>> = {
         'GET': {},
         'POST': {},
         'PUT': {},
         'DELETE': {}
+    };
+
+    // Динамические маршруты — маршруты с параметрами (:id, :slug, и т.д.)
+    private readonly dynamicRoutes: Record<string, DynamicRoute[]> = {
+        'GET': [],
+        'POST': [],
+        'PUT': [],
+        'DELETE': []
     };
 
     private constructor() {}
@@ -32,15 +56,97 @@ export class RouterRegistry {
         return RouterRegistry.instance;
     }
 
-    public register(method: string, path: string, handler: Function) {
-        if (!this.routes[method]) {
-            this.routes[method] = {};
-        }
-        this.routes[method][path] = handler as any;
+    /**
+     * Компилирует шаблон маршрута с параметрами в RegExp.
+     * Пример: '/students/:id/' → { regex: /^\/students\/([^/]+)\/$/, paramNames: ['id'] }
+     */
+    private compileRoute(pattern: string): { regex: RegExp; paramNames: string[] } {
+        const paramNames: string[] = [];
+        // Экранируем спецсимволы регулярных выражений, кроме :param
+        const regexStr = pattern
+            .replace(/([.+?^${}()|[\]\\])/g, '\\$1')
+            .replace(/:(\w+)/g, (_, name) => {
+                paramNames.push(name);
+                return '([^/]+)';
+            });
+        return { regex: new RegExp(`^${regexStr}$`), paramNames };
     }
 
-    public getHandler(method: string, path: string) {
-        return this.routes[method]?.[path];
+    /**
+     * Регистрирует обработчик маршрута.
+     * Автоматически определяет тип: статический (точное совпадение) или динамический (с :параметрами).
+     */
+    public register(method: string, path: string, handler: Function) {
+        if (path.includes(':')) {
+            // Динамический маршрут (содержит параметры)
+            const { regex, paramNames } = this.compileRoute(path);
+            if (!this.dynamicRoutes[method]) {
+                this.dynamicRoutes[method] = [];
+            }
+            this.dynamicRoutes[method].push({
+                pattern: path,
+                regex,
+                paramNames,
+                handler: handler as any
+            });
+            console.log(`[Router] Динамический маршрут: ${method} ${path} → RegExp: ${regex}`);
+        } else {
+            // Статический маршрут (точное совпадение)
+            if (!this.staticRoutes[method]) {
+                this.staticRoutes[method] = {};
+            }
+            this.staticRoutes[method][path] = handler as any;
+            console.log(`[Router] Статический маршрут: ${method} ${path}`);
+        }
+    }
+
+    /**
+     * Ищет обработчик для указанного HTTP-метода и пути.
+     * 
+     * Алгоритм:
+     * 1. Сначала O(1) поиск в статических маршрутах (быстрый путь)
+     * 2. Если не найден — последовательный поиск среди динамических маршрутов
+     * 
+     * @returns RouteMatch с обработчиком и извлечёнными параметрами, или null
+     */
+    public getHandler(method: string, path: string): RouteMatch | null {
+        // 1. Быстрый путь: точное совпадение (O(1))
+        const exactHandler = this.staticRoutes[method]?.[path];
+        if (exactHandler) {
+            return { handler: exactHandler, params: {} };
+        }
+        
+        // 2. Динамические маршруты: поиск по RegExp
+        const dynamicList = this.dynamicRoutes[method];
+        if (dynamicList) {
+            for (const route of dynamicList) {
+                const match = path.match(route.regex);
+                if (match) {
+                    const params: Record<string, string> = {};
+                    route.paramNames.forEach((name, i) => {
+                        params[name] = decodeURIComponent(match[i + 1]);
+                    });
+                    return { handler: route.handler, params };
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Вспомогательный метод для отладки: выводит все зарегистрированные маршруты
+     */
+    public printRoutes(): void {
+        console.log('\n[Router] === Зарегистрированные маршруты ===');
+        for (const method of ['GET', 'POST', 'PUT', 'DELETE']) {
+            const statics = Object.keys(this.staticRoutes[method] || {});
+            const dynamics = (this.dynamicRoutes[method] || []).map(r => r.pattern);
+            for (const p of [...statics, ...dynamics]) {
+                console.log(`  ${method.padEnd(6)} ${p}`);
+            }
+        }
+        console.log('[Router] =====================================\n');
     }
 }
 
