@@ -181,6 +181,16 @@ export const PostRoute = createMethodDecorator('POST');
 export const PutRoute = createMethodDecorator('PUT');
 export const DeleteRoute = createMethodDecorator('DELETE');
 
+const INJECT_METADATA_KEY = 'custom:inject';
+
+export function Inject(token: string | symbol): ParameterDecorator {
+    return (target, propertyKey, parameterIndex) => {
+        const existing = Reflect.getMetadata(INJECT_METADATA_KEY, target) || [];
+        existing.push({ index: parameterIndex, token });
+        Reflect.defineMetadata(INJECT_METADATA_KEY, existing, target);
+    };
+}
+
 /**
  * Утилита для склейки и нормализации пути
  */
@@ -193,6 +203,7 @@ function normalizePath(basePath: string, routePath: string): string {
 /**
  * Декоратор класса Controller.
  * Регистрирует все методы класса, помеченные декораторами маршрутов.
+ * Теперь поддерживает внедрение зависимостей через DIContainer.
  */
 export function Controller(basePath: string = ''): ClassDecorator {
     return function (constructor: Function) {
@@ -200,8 +211,18 @@ export function Controller(basePath: string = ''): ClassDecorator {
         const routes: RouteDefinition[] = Reflect.getMetadata(ROUTE_METADATA_KEY, constructor) || [];
         
         if (routes.length > 0) {
-            // Создаем единственный экземпляр контроллера
-            const instance = new (constructor as any)();
+            const container = require('./container').DIContainer.getInstance();
+            
+            // Получаем метаданные параметров для инъекции
+            const injectMeta = Reflect.getMetadata(INJECT_METADATA_KEY, constructor) || [];
+            
+            // Разрешаем зависимости по их токенам
+            const args = injectMeta
+                .sort((a: any, b: any) => a.index - b.index)
+                .map((meta: any) => container.resolve(meta.token));
+            
+            // Создаем экземпляр контроллера с инъекцией зависимостей
+            const instance = new (constructor as any)(...args);
             const routerRegistry = RouterRegistry.getInstance();
 
             for (const route of routes) {
