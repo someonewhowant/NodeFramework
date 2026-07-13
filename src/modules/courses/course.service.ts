@@ -1,7 +1,8 @@
 import { Category, Course, CourseFactory } from './course.model';
 import { Student, Teacher, UserFactory } from '../students/student.model';
+import { DIContainer } from '../../../core/container';
 
-export class Engine {
+export class CourseService {
     teachers: Teacher[] = [];
     students: Student[] = [];
     courses: Course[] = [];
@@ -26,4 +27,5 @@ export class Engine {
     }
 }
 
-export const site = new Engine();
+// Регистрируем синглтон в DI контейнере
+DIContainer.getInstance().register('CourseService', new CourseService());
