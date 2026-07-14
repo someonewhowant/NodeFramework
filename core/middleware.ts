@@ -7,6 +7,7 @@ import { CONTENT_TYPES_MAP } from './content_types';
 import * as path from 'path';
 import * as fs from 'fs';
 import { appLogger } from './logger';
+export { authMiddleware } from './auth';
 
 /**
  * Функция передачи управления следующему middleware в конвейере

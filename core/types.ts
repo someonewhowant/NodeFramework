@@ -5,6 +5,7 @@ export interface SimbaRequest extends IncomingMessage {
     body?: any;
     params?: Record<string, string>;
     path?: string;
+    user?: any;
 }
 
 export interface SimbaResponse extends ServerResponse {}

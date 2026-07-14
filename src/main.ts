@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { Framework } from '../core/framework';
 import { appLogger } from '../core/logger';
 import { UnitOfWork } from '../core/unit_of_work';
+import { appAuthService, JwtAuthStrategy } from '../core/auth';
 import { beginTransaction, commitTransaction, rollbackTransaction, closeDatabase } from './database/connection';
 import { config } from './config';
 
@@ -13,6 +14,9 @@ UnitOfWork.transactionManager = {
     commit: commitTransaction,
     rollback: rollbackTransaction
 };
+
+// 0.5 Настройка аутентификации
+appAuthService.addStrategy(new JwtAuthStrategy('super-secret-key'));
 
 /**
  * Функция для автоматического сканирования и регистрации модулей

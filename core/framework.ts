@@ -12,9 +12,10 @@ import {
     loggingMiddleware,
     bodyParserMiddleware,
     unitOfWorkMiddleware,
-    routerMiddleware
+    routerMiddleware,
+    authMiddleware
 } from './middleware';
-
+import { securityHeadersMiddleware } from './security';
 
 export class Framework {
     /**
@@ -85,10 +86,12 @@ export class Framework {
     private buildPipeline(): MiddlewarePipeline {
         const pipeline = new MiddlewarePipeline();
 
-        pipeline.use(errorHandlerMiddleware());     // 1. Обработка ошибок — обёртка вокруг всего
+        pipeline.use(errorHandlerMiddleware());      // 1. Обработка ошибок — обёртка вокруг всего
+        pipeline.use(securityHeadersMiddleware());   // 1.5 Безопасные заголовки
         pipeline.use(staticFilesMiddleware());       // 2. Статика — short-circuit, не вызывает next()
         pipeline.use(loggingMiddleware());           // 3. Логирование — замер времени
         pipeline.use(bodyParserMiddleware());        // 4. Парсинг тела — JSON / URL-Encoded
+        pipeline.use(authMiddleware());              // 4.5 Идентификация пользователя
 
         // Пользовательские middleware (CORS, авторизация, rate-limit и т.д.)
         pipeline.useAll(this.userMiddlewares);
