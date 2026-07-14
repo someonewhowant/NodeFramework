@@ -3,7 +3,16 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { Framework } from '../core/framework';
 import { appLogger } from '../core/logger';
+import { UnitOfWork } from '../core/unit_of_work';
+import { beginTransaction, commitTransaction, rollbackTransaction, closeDatabase } from './database/connection';
 import { config } from './config';
+
+// 0. Инициализация глобальных компонентов ядра
+UnitOfWork.transactionManager = {
+    begin: beginTransaction,
+    commit: commitTransaction,
+    rollback: rollbackTransaction
+};
 
 /**
  * Функция для автоматического сканирования и регистрации модулей
@@ -35,6 +44,11 @@ const app = new Framework({
     staticUrl: '/static/',
     staticDir: path.join(__dirname, '..', 'staticfiles'),
     viewsDir: path.join(__dirname, 'views')
+});
+
+app.onShutdown(async () => {
+    appLogger.info('[Server] Закрытие соединения с базой данных...');
+    await closeDatabase();
 });
 
 // 3. Запуск сервера

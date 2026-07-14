@@ -28,3 +28,39 @@ export const get = (sql: string, params: any[] = []): Promise<any> => {
         });
     });
 };
+
+export const beginTransaction = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run('BEGIN TRANSACTION', (err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+};
+
+export const commitTransaction = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run('COMMIT', (err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+};
+
+export const rollbackTransaction = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.run('ROLLBACK', (err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+};
+
+export const closeDatabase = (): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        db.close((err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+};

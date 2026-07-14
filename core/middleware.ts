@@ -191,7 +191,12 @@ export function unitOfWorkMiddleware(): Middleware {
     return async (req, res, next) => {
         const uow = new UnitOfWork();
         await UnitOfWork.asyncLocalStorage.run(uow, async () => {
-            await next();
+            try {
+                await next();
+            } catch (err) {
+                await uow.rollback();
+                throw err;
+            }
         });
     };
 }

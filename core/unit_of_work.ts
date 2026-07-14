@@ -1,8 +1,9 @@
 import { AsyncLocalStorage } from 'async_hooks';
-import { IMapperRegistry } from './types';
+import { IMapperRegistry, ITransactionManager } from './types';
 
 export class UnitOfWork {
     static asyncLocalStorage = new AsyncLocalStorage<UnitOfWork>();
+    static transactionManager?: ITransactionManager;
 
     newObjects: any[] = [];
     dirtyObjects: any[] = [];
@@ -31,10 +32,46 @@ export class UnitOfWork {
         if (!this.mapperRegistry) {
             throw new Error('MapperRegistry not set for UnitOfWork');
         }
-        await this.insertNew();
-        await this.updateDirty();
-        await this.deleteRemoved();
         
+        try {
+            if (UnitOfWork.transactionManager) {
+                await UnitOfWork.transactionManager.begin();
+            }
+
+            await this.insertNew();
+            await this.updateDirty();
+            await this.deleteRemoved();
+            
+            if (UnitOfWork.transactionManager) {
+                await UnitOfWork.transactionManager.commit();
+            }
+
+            this.clear();
+        } catch (err) {
+            if (UnitOfWork.transactionManager) {
+                try {
+                    await UnitOfWork.transactionManager.rollback();
+                } catch (rollbackErr) {
+                    // Игнорируем ошибку отката (например, если транзакция не была начата)
+                }
+            }
+            this.clear();
+            throw err;
+        }
+    }
+
+    async rollback() {
+        if (UnitOfWork.transactionManager) {
+            try {
+                await UnitOfWork.transactionManager.rollback();
+            } catch (e) {
+                // Игнорируем ошибку отката
+            }
+        }
+        this.clear();
+    }
+
+    private clear() {
         this.newObjects = [];
         this.dirtyObjects = [];
         this.removedObjects = [];

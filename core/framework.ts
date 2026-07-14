@@ -27,6 +27,7 @@ export class Framework {
      * Кэшированный конвейер (строится лениво при первом запросе)
      */
     private _pipeline?: MiddlewarePipeline;
+    private shutdownHooks: (() => Promise<void> | void)[] = [];
 
     constructor(config?: FrameworkConfig) {
         if (config) {
@@ -56,6 +57,14 @@ export class Framework {
      */
     use(middleware: Middleware): this {
         this.userMiddlewares.push(middleware);
+        return this;
+    }
+
+    /**
+     * Регистрирует функцию, которая будет вызвана при Graceful Shutdown (SIGTERM/SIGINT)
+     */
+    onShutdown(hook: () => Promise<void> | void): this {
+        this.shutdownHooks.push(hook);
         return this;
     }
 
@@ -134,6 +143,44 @@ export class Framework {
     listen(port: number, callback?: () => void) {
         const server = http.createServer((req, res) => this.handleRequest(req, res));
         server.listen(port, callback);
+
+        // Graceful shutdown handling
+        const shutdown = async (signal: string) => {
+            const { appLogger } = require('./logger');
+            appLogger.info(`\n[Framework] Received ${signal}. Starting graceful shutdown...`);
+            
+            // Stop accepting new connections
+            server.close(async (err) => {
+                if (err) {
+                    appLogger.error(`[Framework] Server close error:`, err);
+                    process.exit(1);
+                }
+                
+                appLogger.info('[Framework] HTTP server closed. Executing shutdown hooks...');
+                
+                // Execute hooks (e.g. close DB)
+                try {
+                    for (const hook of this.shutdownHooks) {
+                        await hook();
+                    }
+                    appLogger.info('[Framework] Graceful shutdown complete. Exiting.');
+                    process.exit(0);
+                } catch (hookErr) {
+                    appLogger.error('[Framework] Error during shutdown hooks:', hookErr);
+                    process.exit(1);
+                }
+            });
+
+            // Force close if takes too long (10 seconds timeout)
+            setTimeout(() => {
+                appLogger.error('[Framework] Could not close connections in time, forcefully shutting down');
+                process.exit(1);
+            }, 10000).unref();
+        };
+
+        process.on('SIGTERM', () => shutdown('SIGTERM'));
+        process.on('SIGINT', () => shutdown('SIGINT'));
+
         return server;
     }
 }

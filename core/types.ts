@@ -36,3 +36,9 @@ export interface IMapperRegistry {
     getMapper(obj: any): IMapper;
     getCurrentMapper?(name: string): IMapper;
 }
+
+export interface ITransactionManager {
+    begin(): Promise<void>;
+    commit(): Promise<void>;
+    rollback(): Promise<void>;
+}
