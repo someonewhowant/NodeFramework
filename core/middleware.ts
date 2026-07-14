@@ -6,6 +6,7 @@ import { FrameworkSettings } from './settings';
 import { CONTENT_TYPES_MAP } from './content_types';
 import * as path from 'path';
 import * as fs from 'fs';
+import { appLogger } from './logger';
 
 /**
  * Функция передачи управления следующему middleware в конвейере
@@ -86,7 +87,7 @@ export function errorHandlerMiddleware(): Middleware {
         try {
             await next();
         } catch (err: any) {
-            console.error('[Middleware:Error] Обработанная ошибка:', err.message || err);
+            appLogger.error('[Middleware:Error] Обработанная ошибка:', err.message || err);
 
             // Если заголовки уже отправлены, мы не можем писать статус-код
             if (res.headersSent) return;
@@ -152,12 +153,12 @@ export function staticFilesMiddleware(): Middleware {
 export function loggingMiddleware(): Middleware {
     return async (req, res, next) => {
         const start = Date.now();
-        console.log(`[Middleware:Log] → ${req.method} ${req.path}`);
+        appLogger.info(`[Middleware:Log] → ${req.method} ${req.path}`);
 
         await next();
 
         const duration = Date.now() - start;
-        console.log(`[Middleware:Log] ← ${req.method} ${req.path} ${res.statusCode} (${duration}ms)`);
+        appLogger.info(`[Middleware:Log] ← ${req.method} ${req.path} ${res.statusCode} (${duration}ms)`);
     };
 }
 

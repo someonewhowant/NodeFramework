@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { SimbaRequest, SimbaResponse, RouteMatch } from './types';
+import { appLogger } from './logger';
 
 // Константа для ключа метаданных маршрутов
 const ROUTE_METADATA_KEY = 'custom:routes';
@@ -89,14 +90,14 @@ export class RouterRegistry {
                 paramNames,
                 handler: handler as any
             });
-            console.log(`[Router] Динамический маршрут: ${method} ${path} → RegExp: ${regex}`);
+            appLogger.debug(`[Router] Динамический маршрут: ${method} ${path} → RegExp: ${regex}`);
         } else {
             // Статический маршрут (точное совпадение)
             if (!this.staticRoutes[method]) {
                 this.staticRoutes[method] = {};
             }
             this.staticRoutes[method][path] = handler as any;
-            console.log(`[Router] Статический маршрут: ${method} ${path}`);
+            appLogger.debug(`[Router] Статический маршрут: ${method} ${path}`);
         }
     }
 
@@ -138,15 +139,15 @@ export class RouterRegistry {
      * Вспомогательный метод для отладки: выводит все зарегистрированные маршруты
      */
     public printRoutes(): void {
-        console.log('\n[Router] === Зарегистрированные маршруты ===');
+        appLogger.info('\n[Router] === Зарегистрированные маршруты ===');
         for (const method of ['GET', 'POST', 'PUT', 'DELETE']) {
             const statics = Object.keys(this.staticRoutes[method] || {});
             const dynamics = (this.dynamicRoutes[method] || []).map(r => r.pattern);
             for (const p of [...statics, ...dynamics]) {
-                console.log(`  ${method.padEnd(6)} ${p}`);
+                appLogger.info(`  ${method.padEnd(6)} ${p}`);
             }
         }
-        console.log('[Router] =====================================\n');
+        appLogger.info('[Router] =====================================\n');
     }
 }
 

@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Framework } from '../core/framework';
+import { appLogger } from '../core/logger';
 import { config } from './config';
 
 /**
@@ -20,7 +21,7 @@ function bootstrapModules(modulesDir: string) {
         } else if (item.name.endsWith('.controller.ts') || item.name.endsWith('.service.ts')) {
             // Динамический импорт файлов
             require(fullPath);
-            console.log(`[Bootstrap] Загружен модуль: ${item.name}`);
+            appLogger.info(`[Bootstrap] Загружен модуль: ${item.name}`);
         }
     }
 }
@@ -38,7 +39,7 @@ const app = new Framework({
 
 // 3. Запуск сервера
 app.listen(config.PORT, () => {
-    console.log(`[Server] Окружение: ${config.NODE_ENV}`);
-    console.log(`[Server] Запуск сервера на порту ${config.PORT}...`);
-    console.log(`[Server] http://localhost:${config.PORT}/`);
+    appLogger.info(`[Server] Окружение: ${config.NODE_ENV}`);
+    appLogger.info(`[Server] Запуск сервера на порту ${config.PORT}...`);
+    appLogger.info(`[Server] http://localhost:${config.PORT}/`);
 });

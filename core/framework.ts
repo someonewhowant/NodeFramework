@@ -2,6 +2,8 @@ import { parseGetRequest } from './request_parser';
 import { IncomingMessage, ServerResponse } from 'http';
 import { SimbaRequest, SimbaResponse, FrameworkConfig } from './types';
 import { FrameworkSettings, configureSettings } from './settings';
+import * as http from 'http';
+
 import {
     Middleware,
     MiddlewarePipeline,
@@ -12,7 +14,7 @@ import {
     unitOfWorkMiddleware,
     routerMiddleware
 } from './middleware';
-import * as http from 'http';
+
 
 export class Framework {
     /**
@@ -25,7 +27,7 @@ export class Framework {
      * Кэшированный конвейер (строится лениво при первом запросе)
      */
     private _pipeline?: MiddlewarePipeline;
-    
+
     constructor(config?: FrameworkConfig) {
         if (config) {
             configureSettings({
@@ -74,7 +76,6 @@ export class Framework {
     private buildPipeline(): MiddlewarePipeline {
         const pipeline = new MiddlewarePipeline();
 
-        // Системные middleware (порядок критичен!)
         pipeline.use(errorHandlerMiddleware());     // 1. Обработка ошибок — обёртка вокруг всего
         pipeline.use(staticFilesMiddleware());       // 2. Статика — short-circuit, не вызывает next()
         pipeline.use(loggingMiddleware());           // 3. Логирование — замер времени
@@ -97,7 +98,8 @@ export class Framework {
     private getPipeline(): MiddlewarePipeline {
         if (!this._pipeline) {
             this._pipeline = this.buildPipeline();
-            console.log(`[Framework] Конвейер собран: ${this._pipeline.length} middleware`);
+            const { appLogger } = require('./logger');
+            appLogger.info(`[Framework] Конвейер собран: ${this._pipeline.length} middleware`);
         }
         return this._pipeline;
     }
