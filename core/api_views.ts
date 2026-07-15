@@ -1,6 +1,7 @@
 import { SimbaRequest, SimbaResponse } from './types';
 import { GetRoute, PostRoute, PutRoute, DeleteRoute } from './decorators';
 import { JsonResponse } from './response';
+import { Pagination } from './pagination';
 
 /**
  * Базовый класс для API-контроллеров (без шаблонов).
@@ -56,6 +57,12 @@ export abstract class APIListView<T = any> extends APIView {
     abstract getQueryset(): Promise<T[]>;
 
     /**
+     * Класс пагинации, используемый для этого списка.
+     * Если не задан, возвращаются все элементы без пагинации.
+     */
+    paginationClass?: Pagination;
+
+    /**
      * Сериализует массив объектов в формат, пригодный для JSON.
      * Переопределите для контроля структуры ответа (выбор полей, вложенные связи).
      * По умолчанию возвращает объекты как есть.
@@ -66,8 +73,15 @@ export abstract class APIListView<T = any> extends APIView {
 
     @GetRoute()
     async handleGet(req: SimbaRequest, res: SimbaResponse): Promise<void> {
-        const items = await this.getQueryset();
-        JsonResponse.send(res, this.serialize(items));
+        let items = await this.getQueryset();
+        
+        if (this.paginationClass) {
+            const paginatedData = this.paginationClass.paginate(items, req);
+            paginatedData.results = this.serialize(paginatedData.results);
+            JsonResponse.send(res, paginatedData);
+        } else {
+            JsonResponse.send(res, this.serialize(items));
+        }
     }
 }
 

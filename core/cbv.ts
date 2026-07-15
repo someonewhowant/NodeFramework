@@ -1,6 +1,7 @@
 import { SimbaRequest, SimbaResponse } from './types';
 import { render } from './templator';
 import { GetRoute, PostRoute } from './decorators';
+import { Pagination } from './pagination';
 
 /**
  * Базовый контроллер для простейшего рендеринга шаблонов
@@ -38,6 +39,11 @@ export abstract class ListView<T = any> extends TemplateView {
     abstract queryset: T[];
     abstract contextObjectName: string;
 
+    /**
+     * Класс пагинации
+     */
+    paginationClass?: Pagination;
+
     async getQueryset(): Promise<T[]> {
         return this.queryset;
     }
@@ -48,7 +54,16 @@ export abstract class ListView<T = any> extends TemplateView {
 
     async getContextData(req: SimbaRequest): Promise<Record<string, any>> {
         const context = await super.getContextData(req);
-        context[this.getContextObjectName()] = await this.getQueryset();
+        let items = await this.getQueryset();
+        
+        if (this.paginationClass) {
+            const paginatedData = this.paginationClass.paginate(items, req);
+            context[this.getContextObjectName()] = paginatedData.results;
+            context['page_obj'] = paginatedData; // Передаём информацию о пагинации в шаблон
+        } else {
+            context[this.getContextObjectName()] = items;
+        }
+        
         return context;
     }
 }

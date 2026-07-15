@@ -1,5 +1,15 @@
 import { Student } from './student.model';
 import { db, run, all, get } from '../../database/connection';
+import { QueryBuilder, QueryRegistry } from '../../../core/query_builder';
+
+// Регистрация фабрики QueryBuilder для модели Student
+QueryRegistry.register(Student, () => {
+    return new QueryBuilder<Student>('student', { all }, (row: any) => {
+        const student = new Student(row.name);
+        student.id = row.id;
+        return student;
+    });
+});
 
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS student (
@@ -11,13 +21,12 @@ db.serialize(() => {
 export class StudentMapper {
     tablename = 'student';
 
+    query(): QueryBuilder<Student> {
+        return QueryRegistry.query(Student);
+    }
+
     async all(): Promise<Student[]> {
-        const rows = await all(`SELECT * FROM ${this.tablename}`);
-        return rows.map((row: any) => {
-            const student = new Student(row.name);
-            student.id = row.id;
-            return student;
-        });
+        return this.query().execute();
     }
 
     async findById(id: number): Promise<Student> {
